@@ -21,6 +21,7 @@ RUN pip install \
         safetensors==0.7.0 \
         gymnasium==1.4.0 \
         gym-pusht==0.1.8 \
+        diffusers==0.35.2 \
         pytest
 
 WORKDIR /workspace/rs_rtc
