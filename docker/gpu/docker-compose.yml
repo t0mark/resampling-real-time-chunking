@@ -1,0 +1,30 @@
+# RS-RTC GPU 평가 컨테이너 (NVIDIA Container Toolkit 필요)
+#
+# 사용 (rs_rtc/ 에서):
+#   docker compose -f docker/gpu/docker-compose.yml up -d --build
+#   docker exec airlab_hw_rtc_gpu pip install -e /workspace/rs_rtc
+#   docker exec airlab_hw_rtc_gpu python3 scripts/eval_gpu.py
+#   docker compose -f docker/gpu/docker-compose.yml down
+
+services:
+  rtc_gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: t0mark251/rs_rtc_gpu
+    container_name: airlab_hw_rtc_gpu
+    working_dir: /workspace/rs_rtc
+    volumes:
+      # rs_rtc 프로젝트 전체 (결과는 rs_rtc/results/ 에 저장)
+      - ../..:/workspace/rs_rtc
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    shm_size: "8gb"
+    stdin_open: true
+    tty: true
+    command: sleep infinity

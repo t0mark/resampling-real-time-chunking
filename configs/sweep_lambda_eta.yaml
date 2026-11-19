@@ -1,0 +1,84 @@
+# RS-RTC λ_max × η sweep (d=4, 200 에피소드) + 같은 조건 비교 기준
+
+episodes: 200
+seed_start: 100000
+max_episode_steps: 300
+sampler_seed: 0
+npu_device: 0
+# 프로세스당 torch CPU 스레드 (병렬 실행 시 경합 방지)
+cpu_threads: 4
+
+delays: [4]
+
+methods:
+  naive_async:
+    type: vanilla
+    particles: 1
+    eta: 0.0
+  bid_n64:
+    type: bid
+    particles: 64
+    eta: 0.0
+  rs_rtc_n64_l100_e0.0:
+    type: rs_rtc
+    particles: 64
+    eta: 0.0
+    guidance_strength: 100.0
+    ess_threshold: 0.5
+    use_replacement: false
+  rs_rtc_n64_l100_e0.5:
+    type: rs_rtc
+    particles: 64
+    eta: 0.5
+    guidance_strength: 100.0
+    ess_threshold: 0.5
+    use_replacement: false
+  rs_rtc_n64_l100_e1.0:
+    type: rs_rtc
+    particles: 64
+    eta: 1.0
+    guidance_strength: 100.0
+    ess_threshold: 0.5
+    use_replacement: false
+  rs_rtc_n64_l300_e0.0:
+    type: rs_rtc
+    particles: 64
+    eta: 0.0
+    guidance_strength: 300.0
+    ess_threshold: 0.5
+    use_replacement: false
+  rs_rtc_n64_l300_e0.5:
+    type: rs_rtc
+    particles: 64
+    eta: 0.5
+    guidance_strength: 300.0
+    ess_threshold: 0.5
+    use_replacement: false
+  rs_rtc_n64_l300_e1.0:
+    type: rs_rtc
+    particles: 64
+    eta: 1.0
+    guidance_strength: 300.0
+    ess_threshold: 0.5
+    use_replacement: false
+  rs_rtc_n64_l1000_e0.0:
+    type: rs_rtc
+    particles: 64
+    eta: 0.0
+    guidance_strength: 1000.0
+    ess_threshold: 0.5
+    use_replacement: false
+  rs_rtc_n64_l1000_e0.5:
+    type: rs_rtc
+    particles: 64
+    eta: 0.5
+    guidance_strength: 1000.0
+    ess_threshold: 0.5
+    use_replacement: false
+  rs_rtc_n64_l1000_e1.0:
+    type: rs_rtc
+    particles: 64
+    eta: 1.0
+    guidance_strength: 1000.0
+    ess_threshold: 0.5
+    use_replacement: false

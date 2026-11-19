@@ -1,0 +1,12 @@
+# 사전학습 UNet 1 step 그래프의 batch N 별 NPU 컴파일·정합성·지연 측정
+
+# 측정 대상 batch (= particle 수 N)
+batch_sizes: [1, 16, 64, 256, 1024]
+
+# 측정 설정
+npu_device: 1
+warmup_iterations: 20
+measure_iterations: 200
+cpu_measure_iterations: 5
+parity_samples: 2
+seed: 0

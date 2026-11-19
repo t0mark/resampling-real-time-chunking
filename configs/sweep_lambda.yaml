@@ -1,0 +1,44 @@
+# RS-RTC 가이던스 강도 λ_max 선택 (검증 seed, d=4): 본 실험(eval_npu.yaml) 전에 λ 1개를 고른다
+# 본 실험 seed (100000~) 와 겹치지 않는 검증 seed 사용
+
+episodes: 50
+seed_start: 200000
+max_episode_steps: 300
+sampler_seed: 0
+npu_device: 0
+# 프로세스당 torch CPU 스레드 (병렬 실행 시 경합 방지)
+cpu_threads: 4
+# 결과 폴더 (results/metrics/{metrics_subdir}/)
+metrics_subdir: sweep_lambda_val
+
+delays: [4]
+
+methods:
+  rs_rtc_n64_l100:
+    type: rs_rtc
+    particles: 64
+    eta: 0.5
+    guidance_strength: 100.0
+    ess_threshold: 0.5
+    use_replacement: false
+  rs_rtc_n64_l300:
+    type: rs_rtc
+    particles: 64
+    eta: 0.5
+    guidance_strength: 300.0
+    ess_threshold: 0.5
+    use_replacement: false
+  rs_rtc_n64_l1000:
+    type: rs_rtc
+    particles: 64
+    eta: 0.5
+    guidance_strength: 1000.0
+    ess_threshold: 0.5
+    use_replacement: false
+  rs_rtc_n64_l3000:
+    type: rs_rtc
+    particles: 64
+    eta: 0.5
+    guidance_strength: 3000.0
+    ess_threshold: 0.5
+    use_replacement: false

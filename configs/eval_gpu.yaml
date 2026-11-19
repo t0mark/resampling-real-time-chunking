@@ -1,0 +1,22 @@
+# GPU 비동기 실행 평가: 역전파(VJP) 가이던스 RTC × 지연 d (scripts/eval_gpu.py)
+# 에피소드·seed·지연은 eval_npu.yaml 과 동일하게 유지한다.
+
+# 평가 에피소드 (env seed = seed_start + 에피소드 번호, 모든 방법 공통)
+episodes: 50
+seed_start: 100000
+max_episode_steps: 300
+sampler_seed: 0
+# UNet 연산 장치 (노이즈·DDIM 갱신은 항상 CPU)
+device: cuda
+cpu_threads: 4
+
+# 지연 d (제어 스텝, 0 = 동기 실행과 동일, 최대 7)
+delays: [0, 1, 2, 4, 7]
+
+# 방법 정의 (type: rtc_vjp)
+#   guidance_weight: RTC 가이던스 가중치 β
+methods:
+  rtc_vjp:
+    type: rtc_vjp
+    eta: 0.0
+    guidance_weight: 5.0

@@ -1,0 +1,15 @@
+
+# logs
+results/logs/
+
+# compiled NPU models
+results/compiled/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# egg-info
+*.egg-info/
+results/compiled/
