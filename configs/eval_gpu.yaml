@@ -13,10 +13,15 @@ cpu_threads: 4
 # 지연 d (제어 스텝, 0 = 동기 실행과 동일, 최대 7)
 delays: [0, 1, 2, 4, 7]
 
-# 방법 정의 (type: rtc_vjp)
-#   guidance_weight: RTC 가이던스 가중치 β
+# 방법 정의 (type: rtc_vjp | rtc_paper)
+#   rtc_vjp: 고정 가중치 β√(1−ᾱ) 로 ε 보정 / rtc_paper: 원 논문 공식 코드의 가중치 min(β, (1−τ)/τ·1/r²)
+#   guidance_weight: RTC 가이던스 가중치 β (rtc_paper 는 상한)
 methods:
   rtc_vjp:
     type: rtc_vjp
+    eta: 0.0
+    guidance_weight: 5.0
+  rtc_paper:
+    type: rtc_paper
     eta: 0.0
     guidance_weight: 5.0

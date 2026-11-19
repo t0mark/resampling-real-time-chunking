@@ -21,8 +21,10 @@ from rs_rtc import PROJECT_ROOT
 from rs_rtc.evaluation import evaluate_combination
 from rs_rtc.policies.pretrained import load_pretrained_policy
 from rs_rtc.samplers.ddim import DdimSchedule
-from rs_rtc.samplers.rtc_vjp import RtcVjpSampler
+from rs_rtc.samplers.rtc_vjp import RtcPaperSampler, RtcVjpSampler
 from rs_rtc.utils.logging import setup_logger
+
+RTC_SAMPLER_CLASSES = {"rtc_vjp": RtcVjpSampler, "rtc_paper": RtcPaperSampler}
 
 LOGGER = setup_logger("rs_rtc", "eval_gpu")
 
@@ -41,8 +43,8 @@ def parse_arguments():
 def build_chunk_generator(method_config, policy, schedule, device):
     """방법 설정으로 역전파 가이던스 chunk 생성기를 만든다."""
     sampler_arguments = (schedule, policy.horizon, policy.unet.action_dim, policy.unet.time_embed_dim)
-    return RtcVjpSampler(policy.unet, *sampler_arguments, method_config["eta"], method_config["guidance_weight"],
-                         device)
+    sampler_class = RTC_SAMPLER_CLASSES[method_config["type"]]
+    return sampler_class(policy.unet, *sampler_arguments, method_config["eta"], method_config["guidance_weight"], device)
 
 
 def main():

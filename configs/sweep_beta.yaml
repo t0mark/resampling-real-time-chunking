@@ -34,3 +34,19 @@ methods:
     type: rtc_vjp
     eta: 0.0
     guidance_weight: 80.0
+  rtc_paper_b5:
+    type: rtc_paper
+    eta: 0.0
+    guidance_weight: 5.0
+  rtc_paper_b10:
+    type: rtc_paper
+    eta: 0.0
+    guidance_weight: 10.0
+  rtc_paper_b20:
+    type: rtc_paper
+    eta: 0.0
+    guidance_weight: 20.0
+  rtc_paper_b50:
+    type: rtc_paper
+    eta: 0.0
+    guidance_weight: 50.0
