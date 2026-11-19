@@ -5,6 +5,12 @@
     python3 scripts/eval_npu.py                                       # 설정의 모든 조합
     python3 scripts/eval_npu.py --methods rs_rtc_n64 --delays 4 --episodes 20 --npu-device 3
 """
+import os
+
+# OpenMP·OpenBLAS 스레드 풀 크기 제한 (numpy·torch·rebel import 전에 설정해야 적용됨, 외부 지정값 우선)
+os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "4")
+
 import argparse
 
 import torch

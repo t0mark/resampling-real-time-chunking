@@ -9,6 +9,12 @@ chunk 의 index (n_obs_steps − 1) 부터 n_action_steps 개를 실행 (lerobot
     python3 scripts/eval_sync.py
     python3 scripts/eval_sync.py --backend cpu --episodes 10
 """
+import os
+
+# OpenMP·OpenBLAS 스레드 풀 크기 제한 (numpy·torch·rebel import 전에 설정해야 적용됨, 외부 지정값 우선)
+os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "4")
+
 import argparse
 import csv
 import time

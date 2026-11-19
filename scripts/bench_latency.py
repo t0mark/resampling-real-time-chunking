@@ -10,6 +10,12 @@
     python3 scripts/bench_latency.py
     python3 scripts/bench_latency.py --batch-sizes 1 64
 """
+import os
+
+# OpenMP·OpenBLAS 스레드 풀 크기 제한 (numpy·torch·rebel import 전에 설정해야 적용됨, 외부 지정값 우선)
+os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "4")
+
 import argparse
 import csv
 import time

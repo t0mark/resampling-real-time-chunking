@@ -14,7 +14,7 @@ import time
 import numpy as np
 import torch
 
-from rs_rtc.samplers.base import InpaintingTarget
+from rs_rtc.samplers.base import InpaintingTarget, weighted_inpainting_cost
 
 LOGGER = logging.getLogger("rs_rtc.envs")
 
@@ -63,6 +63,10 @@ class AsyncChunkExecutor:
         generation_start = time.perf_counter()
         normalized_chunk, generation_stats = self._chunk_generator.generate(global_cond, target, generator)
         generation_stats["latency_ms"] = (time.perf_counter() - generation_start) * 1e3
+
+        # 생성 chunk 와 inpainting 목표의 가중 오차 (모든 방법 공통 지표)
+        if target is not None:
+            generation_stats["prefix_cost"] = float(weighted_inpainting_cost(normalized_chunk.unsqueeze(0), target)[0])
         generation_records.append(generation_stats)
         return normalized_chunk, self._policy.action_normalizer.unnormalize(normalized_chunk)
 
@@ -108,7 +112,7 @@ class AsyncChunkExecutor:
         return self.summarize_episode(env_seed, executed_actions, boundary_step_indices, generation_records)
 
     def summarize_episode(self, env_seed, executed_actions, boundary_step_indices, generation_records):
-        """에피소드 지표: 성공, 최대 보상, chunk 전환 시 행동 변화량, 생성 통계."""
+        """에피소드 지표: 성공, 최대 보상, chunk 전환 시 행동 변화량, inpainting 오차, 생성 통계."""
         # 연속 행동 간 변화량 (픽셀)
         action_array = np.asarray(executed_actions)
         step_changes = np.linalg.norm(np.diff(action_array, axis=0), axis=1)
@@ -131,7 +135,7 @@ class AsyncChunkExecutor:
             "generation_p50_ms": round(float(np.percentile(latency_ms, 50)), 2),
             "chunk_count": len(generation_records),
         }
-        for stat_name in ("resample_count", "unique_particles", "min_ess", "selected_cost"):
+        for stat_name in ("prefix_cost", "resample_count", "unique_particles", "min_ess", "selected_cost"):
             stat_values = [record[stat_name] for record in guided_records if stat_name in record]
             if stat_values:
                 episode_result[f"mean_{stat_name}"] = round(float(np.mean(stat_values)), 4)

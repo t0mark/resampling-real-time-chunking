@@ -1,7 +1,7 @@
 """eval_async 결과 CSV 를 방법 × 지연별로 집계한다.
 
 집계 항목: 에피소드 수, 성공률 (Wilson 95% CI), 평균 최대 보상, chunk 전환 변화량 평균 (95% CI), 내부 변화량,
-         전환/내부 비율, 생성 지연 p50, (RS-RTC) resampling 횟수·최소 ESS
+         전환/내부 비율, inpainting 오차 (prefix cost), 생성 지연 p50, (RS-RTC) resampling 횟수·최소 ESS
 결과: results/metrics/summary_{이름}.csv, 표는 로그로 출력
 실행 (컨테이너 내부 또는 호스트, rs_rtc/ 에서):
     python3 scripts/summarize_results.py
@@ -58,7 +58,7 @@ def summarize_group(group_rows):
         "jump_ratio": round(jump_mean / interior_mean, 2),
         "generation_p50_ms": round(group_rows["generation_p50_ms"].mean(), 1),
     }
-    for optional_column in ("mean_resample_count", "mean_min_ess", "mean_selected_cost"):
+    for optional_column in ("mean_prefix_cost", "mean_resample_count", "mean_min_ess", "mean_selected_cost"):
         if optional_column in group_rows:
             summary_row[optional_column.replace("mean_", "")] = round(group_rows[optional_column].mean(), 4)
     return pd.Series(summary_row)
