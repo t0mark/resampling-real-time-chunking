@@ -36,3 +36,14 @@
 - summary_rtc_vjp_gpu.csv 재생성, RESULT.md 갱신 (β 선택 표, 본 실행 표, 측정 조건, d=0 설명 정정)
 - 커밋·push 는 CLAUDE.md 규칙(git 사용 금지)으로 하지 않음 → 사용자에게 대상 안내
 - 결과 파일 소유자가 root (컨테이너에서 생성)
+
+## 2026-11-19 GPU.md 2차: rtc_paper β 선택 + 본 실행
+
+- RtcPaperSampler, eval_gpu.py rtc_paper type, config 추가 반영 확인 (git 사용 안 함), pytest 6 passed
+- β sweep: GPU0 b5 / GPU1 b10 / GPU2 b20 / GPU3 b50 병렬
+- β sweep 결과 (d=4, NaN 없음): b5 64% / b10 58% / b20 60% / b50 52%, prefix 0.0079/0.0086/0.0062/0.0048
+  - 선택 β=5 (최고 SR) → eval_gpu.yaml rtc_paper 변경 없음
+- 본 실행: GPU0 단독, --methods rtc_paper, 순차
+- 본 실행 완료 (exit 0, ~19:55~20:29). SR d0/1/2/4/7 = 76/70/82/70/48 %, p50 280.6~290.8 ms, NaN 없음
+- summary_rtc_gpu.csv 생성, RESULT.md 재구성 (rtc_paper 섹션 추가, rtc_vjp 는 "기존 이식(고정 가중치)" 로 이름 변경)
+- 커밋·push 는 하지 않음 (CLAUDE.md git 금지)
