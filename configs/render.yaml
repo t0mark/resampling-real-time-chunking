@@ -1,0 +1,66 @@
+# 에피소드 렌더링: 같은 seed 에서 RS-RTC·per_step (NPU, scripts/eval_npu.py) 와 RTC (GPU, scripts/eval_gpu.py) 를 --render 로 실행
+# 방법 설정은 eval_npu.yaml (rs_rtc_n64, per_step), eval_gpu.yaml (rtc_paper) 과 동일
+
+# 본 실험 seed 앞부분 (env seed = seed_start + 에피소드 번호)
+episodes: 10
+seed_start: 100000
+max_episode_steps: 300
+sampler_seed: 0
+npu_device: 0
+# UNet 연산 장치 (eval_gpu.py, 노이즈·DDIM 갱신은 항상 CPU)
+device: cuda
+cpu_threads: 4
+# 에피소드 지표 CSV 폴더 (results/metrics/{metrics_subdir}/, 본 실험 CSV 와 분리)
+metrics_subdir: render
+
+delays: [4]
+
+methods:
+  rs_rtc_n64:
+    type: rs_rtc
+    particles: 64
+    eta: 0.5
+    guidance_strength: 1000.0
+    ess_threshold: 0.5
+    use_replacement: false
+  rtc_paper:
+    type: rtc_paper
+    eta: 0.0
+    guidance_weight: 5.0
+  per_step:
+    type: vanilla
+    particles: 1
+    eta: 0.0
+    execute_steps: 1
+    delays: [0]
+
+# MuJoCo 3D 영상 (scripts/render/render_mujoco.py)
+mujoco:
+  width: 1280
+  height: 720
+  fps: 30
+  # 기록의 제어 주기 (PushT 10 Hz)
+  control_hz: 10
+  scene:
+    # PushT 1 px 의 테이블 길이 (작업 공간 512 px ≈ 0.41 m)
+    meters_per_pixel: 0.0008
+    block_height_m: 0.03
+    pusher_tip_height_m: 0.004
+    robot_base_xy: [-0.5, 0.0]
+  # 전체 장면 카메라 (로봇 옆에서 작업 공간과 팔을 함께 봄)
+  camera:
+    lookat: [-0.12, 0.0, 0.10]
+    distance: 0.95
+    azimuth: 90
+    elevation: -42
+  # 좌하단 확대 화면 (밀대를 따라가며 위에서 봄, 로봇팔 숨김, 정사각 size px)
+  inset:
+    size: 340
+    distance: 0.3
+    azimuth: 90
+    elevation: -80
+  # 영상에 표시할 방법 이름
+  method_labels:
+    rs_rtc_n64: "RS-RTC (NPU, particle resampling)"
+    rtc_paper: "RTC (GPU, backprop guidance)"
+    per_step: "No chunking (re-infer every step)"

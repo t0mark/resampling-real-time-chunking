@@ -38,6 +38,7 @@ class RsRtcSampler(DdimChunkSampler):
 
     def generate(self, global_cond, target, generator):
         # 목표가 없으면 (첫 chunk) 표준 DDIM
+        self._last_candidates = None
         if target is None:
             return super().generate(global_cond, target, generator)
 
@@ -80,6 +81,7 @@ class RsRtcSampler(DdimChunkSampler):
         # cost 가 가장 작은 particle 선택
         final_costs = weighted_inpainting_cost(noisy_sample, target)
         best_index = int(torch.argmin(final_costs))
+        self._last_candidates = noisy_sample.clone()
         unique_particle_count = int(torch.unique(noisy_sample.flatten(start_dim=1), dim=0).shape[0])
         return noisy_sample[best_index], {"denoiser_calls": step_count, "resample_count": resample_count,
                                           "selected_cost": float(final_costs[best_index]),

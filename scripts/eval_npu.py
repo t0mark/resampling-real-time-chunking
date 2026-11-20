@@ -4,6 +4,7 @@
 실행 (NPU 컨테이너 airlab_hw_rtc 내부, rs_rtc/ 에서):
     python3 scripts/eval_npu.py                                       # 설정의 모든 조합
     python3 scripts/eval_npu.py --methods rs_rtc_n64 --delays 4 --episodes 20 --npu-device 3
+    python3 scripts/eval_npu.py --config configs/render.yaml --methods rs_rtc_n64 --render  # 렌더 기록(npz) 저장
 """
 import os
 
@@ -17,7 +18,7 @@ import torch
 import yaml
 
 from rs_rtc import PROJECT_ROOT, RESULTS_DIR
-from rs_rtc.evaluation import evaluate_combination
+from rs_rtc.evaluation import RENDER_DIR, evaluate_combination
 from rs_rtc.npu.compile import compile_if_missing
 from rs_rtc.npu.runtime import NpuDenoiserRuntime
 from rs_rtc.policies.pretrained import load_pretrained_policy
@@ -42,6 +43,7 @@ def parse_arguments():
     parser.add_argument("--episodes", type=int, default=None, help="에피소드 수 대체")
     parser.add_argument("--npu-device", type=int, default=None, help="NPU 장치 번호 대체")
     parser.add_argument("--cpu-threads", type=int, default=None, help="torch CPU 스레드 수 대체")
+    parser.add_argument("--render", action="store_true", help="에피소드별 궤적과 chunk 계획·후보 경로를 results/render/ 에 npz 로 저장")
     return parser.parse_args()
 
 
@@ -70,15 +72,19 @@ def main():
     with open(arguments.config) as config_file:
         config = yaml.safe_load(config_file)
     method_names = arguments.methods or list(config["methods"].keys())
-    delays = arguments.delays if arguments.delays is not None else config["delays"]
+    default_delays = arguments.delays if arguments.delays is not None else config["delays"]
     episode_count = arguments.episodes or config["episodes"]
     npu_device = arguments.npu_device if arguments.npu_device is not None else config["npu_device"]
     cpu_threads = arguments.cpu_threads or config["cpu_threads"]
     LOGGER.info("설정: %s, 방법=%s, 지연=%s, 에피소드=%d, NPU=%d, CPU 스레드=%d", arguments.config, method_names,
-                delays, episode_count, npu_device, cpu_threads)
+                default_delays, episode_count, npu_device, cpu_threads)
 
     # 병렬 실행 시 호스트 연산 경합을 막기 위해 CPU 스레드 수 제한
     torch.set_num_threads(cpu_threads)
+
+    # 렌더 기록 저장 위치 (--render 일 때만)
+    render_dir = RENDER_DIR if arguments.render else None
+    LOGGER.info("렌더 기록 저장 위치: %s", render_dir)
 
     # 정책과 DDIM 스케줄
     policy = load_pretrained_policy()
@@ -87,9 +93,14 @@ def main():
 
     # 방법 × 지연 조합 평가
     for method_name in method_names:
-        chunk_generator = build_chunk_generator(config["methods"][method_name], policy, schedule, npu_device)
-        for delay_steps in delays:
-            evaluate_combination(method_name, chunk_generator, delay_steps, policy, config, episode_count)
+        method_config = config["methods"][method_name]
+        chunk_generator = build_chunk_generator(method_config, policy, schedule, npu_device)
+
+        # 지연 목록: --delays > 방법별 delays > 설정 전체 delays
+        method_delays = default_delays if arguments.delays is not None else method_config.get("delays", default_delays)
+        for delay_steps in method_delays:
+            evaluate_combination(method_name, chunk_generator, delay_steps, policy, config, episode_count,
+                                 render_dir, method_config.get("execute_steps"))
 
 
 if __name__ == "__main__":

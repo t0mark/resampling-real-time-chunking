@@ -44,3 +44,28 @@
 ## 지킬 것
 - 코드는 수정하지 않는다. `eval_gpu.yaml`의 `rtc_paper` `guidance_weight`만 바꾼다.
 - 에러가 나면 우회하지 말고 원인을 RESULT.md에 적는다.
+
+---
+
+# GPU 서버 작업 요청 (2026-11-19, 3차): RTC 에피소드 렌더 기록
+
+RS-RTC(NPU)와 같은 seed로 RTC(`rtc_paper`, β=5) 에피소드의 렌더 기록(npz)을 저장해줘. 영상은 이 기록으로 NPU 서버에서 MuJoCo로 만든다. GPU 서버에서는 영상을 만들지 않는다.
+
+## 바뀐 파일 (pull로 받으면 됨)
+- `configs/render.yaml`: d=4, 본 실험 seed 100000~100009 (10 에피소드). 에피소드 지표 CSV는 `results/metrics/render/`에 저장된다.
+- `scripts/eval_gpu.py`: `--render` 옵션 추가. 에피소드마다 `results/render/rtc_paper_d4_ep{번호}.npz`(궤적, chunk 계획 경로)를 저장한다.
+- `envs/async_executor.py`, `evaluation.py`, `samplers/base.py`: 렌더 기록 기능. npz 항목은 `evaluation.py` docstring에 있다.
+- 방법별 `delays`와 `execute_steps` 설정을 지원한다(NPU 쪽 `per_step` 기준선용). GPU 쪽은 영향 없다.
+
+## 할 일
+1. **pull 후 테스트:** `pytest -q tests`. 추가 패키지는 없다.
+2. **렌더 기록 실행** (GPU 1장, 약 2분)
+   ```bash
+   python3 scripts/eval_gpu.py --config configs/render.yaml --methods rtc_paper --render
+   ```
+3. **확인:** `results/metrics/render/rtc_paper_d4.csv`의 성공·최대 보상·전환 변화량이 `results/metrics/eval_async/rtc_paper_d4.csv`의 앞 10개 에피소드와 같은지 확인한다. 렌더 기록은 결과에 영향을 주지 않아야 한다.
+4. **커밋·push 대상:** `results/render/rtc_paper_d4_ep*.npz`, `results/metrics/render/rtc_paper_d4.csv`
+
+## 지킬 것
+- 코드는 수정하지 않는다.
+- 에러가 나면 우회하지 말고 원인을 `_tmp/history.md`에 적는다.

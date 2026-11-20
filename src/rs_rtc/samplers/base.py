@@ -45,6 +45,12 @@ class DdimChunkSampler:
         self._action_dim = action_dim
         self._time_embed_dim = time_embed_dim
         self._eta = eta
+        self._last_candidates = None
+
+    @property
+    def last_candidates(self):
+        """마지막 generate 의 후보 chunk [N, H, Da] (정규화 공간, 후보를 쓰지 않는 방법은 None)."""
+        return self._last_candidates
 
     @property
     def schedule(self):

@@ -16,6 +16,7 @@ delays: [0, 1, 2, 4, 7]
 # 방법 정의 (type: vanilla | replacement | bid | rs_rtc)
 #   particles: NPU 고정 batch (results/compiled/pusht_unet_b{particles}.rbln)
 #   eta: DDIM 확률성 (0 = 결정적)
+#   execute_steps: cycle 당 실행 스텝 s (생략 시 정책 설정 8), delays: 이 방법만 쓸 지연 목록 (생략 시 위 delays)
 methods:
   naive_async:
     type: vanilla
@@ -32,3 +33,9 @@ methods:
     guidance_strength: 1000.0
     ess_threshold: 0.5
     use_replacement: false
+  per_step:
+    type: vanilla
+    particles: 1
+    eta: 0.0
+    execute_steps: 1
+    delays: [0]

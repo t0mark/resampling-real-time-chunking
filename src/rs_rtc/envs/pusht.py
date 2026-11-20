@@ -1,4 +1,4 @@
-"""gym-pusht 환경 래퍼: 관측 이력 관리, 에피소드 지표(최대 보상, 성공) 기록."""
+"""gym-pusht 환경 래퍼: 관측 이력 관리, 에피소드 지표(최대 보상, 성공) 기록, 끝단·블록 상태 조회."""
 from collections import deque
 
 import gym_pusht  # noqa: F401  (환경 등록)
@@ -39,6 +39,23 @@ class PushTEnvironment:
     @property
     def is_done(self):
         return self._is_done
+
+    @property
+    def agent_position(self):
+        """끝단 위치 [x, y] (픽셀)."""
+        agent_position = self._env.unwrapped.agent.position
+        return np.array([agent_position.x, agent_position.y], dtype=np.float32)
+
+    @property
+    def block_pose(self):
+        """T 블록 자세 [x, y, 각도(rad)]."""
+        block = self._env.unwrapped.block
+        return np.array([block.position.x, block.position.y, block.angle], dtype=np.float32)
+
+    @property
+    def goal_pose(self):
+        """목표 T 자세 [x, y, 각도(rad)]."""
+        return np.asarray(self._env.unwrapped.goal_pose, dtype=np.float32)
 
     def reset(self, seed):
         """초기 관측을 n_obs_steps 번 복제해 이력을 채운다 (lerobot 평가와 동일)."""
