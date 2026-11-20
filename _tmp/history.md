@@ -47,3 +47,12 @@
 - 본 실행 완료 (exit 0, ~19:55~20:29). SR d0/1/2/4/7 = 76/70/82/70/48 %, p50 280.6~290.8 ms, NaN 없음
 - summary_rtc_gpu.csv 생성, RESULT.md 재구성 (rtc_paper 섹션 추가, rtc_vjp 는 "기존 이식(고정 가중치)" 로 이름 변경)
 - 커밋·push 는 하지 않음 (CLAUDE.md git 금지)
+
+## 2026-11-20 GPU.md 3차: rtc_paper 렌더 기록
+
+- render.yaml, eval_gpu.py --render 반영 확인, pytest 6 passed
+- results/render/ 에 기존 rs_rtc_n64 npz·mujoco/ 있음 (NPU 쪽, 덮어쓰지 않음)
+- 실행: GPU0, configs/render.yaml --methods rtc_paper --render → exit 0, ~1분
+  - npz 10개 (rtc_paper_d4_ep0~9.npz), 후보 0 개 (batch 1), 요약 SR 60 %, 전환 18.40 px
+- 확인: render CSV 와 eval_async/rtc_paper_d4.csv 앞 10 ep 의 env_seed·success·max_reward·steps·전환/내부 변화량·prefix 오차 모두 동일
+- 에러 없음. 커밋·push 는 하지 않음 (CLAUDE.md git 금지)
