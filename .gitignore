@@ -14,3 +14,7 @@ __pycache__/
 *.egg-info/
 results/compiled/
 assets/
+
+_tmp/
+CLAUDE.md
+RESULT.md
