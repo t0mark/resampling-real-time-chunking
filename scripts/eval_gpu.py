@@ -1,4 +1,4 @@
-"""GPU 비동기 실행 평가: 역전파(VJP) 가이던스 RTC 를 CUDA autograd 로 평가한다 (RBLN SDK 불필요).
+"""GPU 비동기 실행 평가: 역전파(VJP) 가이던스 RTC 를 CUDA autograd 로, RS-RTC 를 CUDA 고정 batch 로 평가한다 (RBLN SDK 불필요).
 
 결과: results/metrics/eval_async/{방법}_d{지연}.csv (에피소드별), 로그 results/logs/eval_gpu_*.log
 실행 (GPU 컨테이너 airlab_hw_rtc_gpu 내부, rs_rtc/ 에서):
@@ -6,6 +6,7 @@
     python3 scripts/eval_gpu.py --delays 4 --episodes 5               # 동작 확인
     python3 scripts/eval_gpu.py --device cpu                          # GPU 없이 확인
     python3 scripts/eval_gpu.py --config configs/render.yaml --methods rtc_paper --render   # 렌더 기록(npz) 저장
+    python3 scripts/eval_gpu.py --methods rs_rtc_n64_gpu --delays 4                        # RS-RTC GPU 실행
 """
 import os
 
@@ -22,12 +23,38 @@ from rs_rtc import PROJECT_ROOT
 from rs_rtc.evaluation import RENDER_DIR, evaluate_combination
 from rs_rtc.policies.pretrained import load_pretrained_policy
 from rs_rtc.samplers.ddim import DdimSchedule
+from rs_rtc.samplers.rs_rtc import RsRtcSampler
 from rs_rtc.samplers.rtc_vjp import RtcPaperSampler, RtcVjpSampler
 from rs_rtc.utils.logging import setup_logger
 
 RTC_SAMPLER_CLASSES = {"rtc_vjp": RtcVjpSampler, "rtc_paper": RtcPaperSampler}
 
 LOGGER = setup_logger("rs_rtc", "eval_gpu")
+
+
+class GpuDenoiser:
+    """UNet 을 CUDA 에서 고정 batch 로 실행 (입출력은 호스트 CPU 텐서, NPU 런타임과 같은 호출 방식)."""
+
+    def __init__(self, unet, device, batch_size):
+        self._device = torch.device(device)
+        self._unet = unet.to(self._device)
+        self._batch_size = batch_size
+        LOGGER.info("GPU 노이즈 예측기: device=%s, batch=%d", self._device, batch_size)
+
+    @property
+    def batch_size(self):
+        return self._batch_size
+
+    def __call__(self, noisy_action, time_features, global_cond):
+        # 고정 batch 확인 (NPU 정적 그래프와 같은 조건)
+        if noisy_action.shape[0] != self._batch_size:
+            raise ValueError(f"입력 batch {noisy_action.shape[0]} ≠ 설정 batch {self._batch_size}")
+
+        # 장치로 전송 후 실행, 결과를 호스트로 복사
+        with torch.no_grad():
+            epsilon = self._unet(noisy_action.to(self._device), time_features.to(self._device),
+                                 global_cond.to(self._device))
+        return epsilon.cpu()
 
 
 def parse_arguments():
@@ -43,8 +70,16 @@ def parse_arguments():
 
 
 def build_chunk_generator(method_config, policy, schedule, device):
-    """방법 설정으로 역전파 가이던스 chunk 생성기를 만든다."""
+    """방법 설정으로 chunk 생성기를 만든다 (RTC 역전파 가이던스 또는 RS-RTC)."""
     sampler_arguments = (schedule, policy.horizon, policy.unet.action_dim, policy.unet.time_embed_dim)
+
+    # RS-RTC: particle 수만큼 고정 batch 로 GPU 에서 실행
+    if method_config["type"] == "rs_rtc":
+        denoiser = GpuDenoiser(policy.unet, device, method_config["particles"])
+        return RsRtcSampler(denoiser, *sampler_arguments, method_config["eta"], method_config["guidance_strength"],
+                            method_config["ess_threshold"], method_config["use_replacement"])
+
+    # RTC: 역전파 가이던스 샘플러
     sampler_class = RTC_SAMPLER_CLASSES[method_config["type"]]
     return sampler_class(policy.unet, *sampler_arguments, method_config["eta"], method_config["guidance_weight"], device)
 

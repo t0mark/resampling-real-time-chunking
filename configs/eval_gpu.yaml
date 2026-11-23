@@ -25,3 +25,11 @@ methods:
     type: rtc_paper
     eta: 0.0
     guidance_weight: 5.0
+  # RS-RTC GPU 실행 (eval_npu.yaml rs_rtc_n64 와 같은 설정, 결과 파일 이름만 다름)
+  rs_rtc_n64_gpu:
+    type: rs_rtc
+    particles: 64
+    eta: 0.5
+    guidance_strength: 1000.0
+    ess_threshold: 0.5
+    use_replacement: false
