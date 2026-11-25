@@ -25,6 +25,7 @@ from rs_rtc.policies.pretrained import load_pretrained_policy
 from rs_rtc.samplers.ddim import DdimSchedule
 from rs_rtc.samplers.rs_rtc import RsRtcSampler
 from rs_rtc.samplers.rtc_vjp import RtcPaperSampler, RtcVjpSampler
+from rs_rtc.utils.cuda_graph import CudaGraphFunction
 from rs_rtc.utils.logging import setup_logger
 
 RTC_SAMPLER_CLASSES = {"rtc_vjp": RtcVjpSampler, "rtc_paper": RtcPaperSampler}
@@ -35,26 +36,36 @@ LOGGER = setup_logger("rs_rtc", "eval_gpu")
 class GpuDenoiser:
     """UNet 을 CUDA 에서 고정 batch 로 실행 (입출력은 호스트 CPU 텐서, NPU 런타임과 같은 호출 방식)."""
 
-    def __init__(self, unet, device, batch_size):
+    def __init__(self, unet, device, batch_size, use_cuda_graph=False):
         self._device = torch.device(device)
         self._unet = unet.to(self._device)
         self._batch_size = batch_size
-        LOGGER.info("GPU 노이즈 예측기: device=%s, batch=%d", self._device, batch_size)
+        self._use_cuda_graph = use_cuda_graph
+        self._forward_graph = None
+        LOGGER.info("GPU 노이즈 예측기: device=%s, batch=%d, CUDA Graph=%s", self._device, batch_size, use_cuda_graph)
 
     @property
     def batch_size(self):
         return self._batch_size
+
+    def forward_on_device(self, noisy_action, time_features, global_cond):
+        """장치 텐서로 ε̂ 계산 (CUDA Graph 캡처 대상)."""
+        with torch.no_grad():
+            return self._unet(noisy_action, time_features, global_cond)
 
     def __call__(self, noisy_action, time_features, global_cond):
         # 고정 batch 확인 (NPU 정적 그래프와 같은 조건)
         if noisy_action.shape[0] != self._batch_size:
             raise ValueError(f"입력 batch {noisy_action.shape[0]} ≠ 설정 batch {self._batch_size}")
 
-        # 장치로 전송 후 실행, 결과를 호스트로 복사
-        with torch.no_grad():
-            epsilon = self._unet(noisy_action.to(self._device), time_features.to(self._device),
-                                 global_cond.to(self._device))
-        return epsilon.cpu()
+        # 장치로 전송 후 실행 (CUDA Graph 사용 시 그래프 재생), 결과를 호스트로 복사
+        device_inputs = (noisy_action.to(self._device), time_features.to(self._device), global_cond.to(self._device))
+        if not self._use_cuda_graph:
+            return self.forward_on_device(*device_inputs).cpu()
+        if self._forward_graph is None:
+            self._forward_graph = CudaGraphFunction(self.forward_on_device, device_inputs,
+                                                    f"unet_b{self._batch_size}")
+        return self._forward_graph(*device_inputs).cpu()
 
 
 def parse_arguments():
@@ -75,12 +86,15 @@ def build_chunk_generator(method_config, policy, schedule, device):
 
     # RS-RTC: particle 수만큼 고정 batch 로 GPU 에서 실행
     if method_config["type"] == "rs_rtc":
-        denoiser = GpuDenoiser(policy.unet, device, method_config["particles"])
+        denoiser = GpuDenoiser(policy.unet, device, method_config["particles"], method_config.get("cuda_graph", False))
         return RsRtcSampler(denoiser, *sampler_arguments, method_config["eta"], method_config["guidance_strength"],
                             method_config["ess_threshold"], method_config["use_replacement"])
 
     # RTC: 역전파 가이던스 샘플러
     sampler_class = RTC_SAMPLER_CLASSES[method_config["type"]]
+    if method_config["type"] == "rtc_paper":
+        return sampler_class(policy.unet, *sampler_arguments, method_config["eta"], method_config["guidance_weight"],
+                             device, method_config.get("cuda_graph", False))
     return sampler_class(policy.unet, *sampler_arguments, method_config["eta"], method_config["guidance_weight"], device)
 
 

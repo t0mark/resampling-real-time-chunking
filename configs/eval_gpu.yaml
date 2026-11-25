@@ -16,6 +16,7 @@ delays: [0, 1, 2, 4, 7]
 # 방법 정의 (type: rtc_vjp | rtc_paper)
 #   rtc_vjp: 고정 가중치 β√(1−ᾱ) 로 ε 보정 / rtc_paper: 원 논문 공식 코드의 가중치 min(β, (1−τ)/τ·1/r²)
 #   guidance_weight: RTC 가이던스 가중치 β (rtc_paper 는 상한)
+#   cuda_graph: GPU 계산을 CUDA Graph 로 캡처해 재생 (rtc_paper, rs_rtc 만, 결과는 eager 와 bit 일치)
 methods:
   rtc_vjp:
     type: rtc_vjp
@@ -25,6 +26,7 @@ methods:
     type: rtc_paper
     eta: 0.0
     guidance_weight: 5.0
+    cuda_graph: true
   # RS-RTC GPU 실행 (eval_npu.yaml rs_rtc_n64 와 같은 설정, 결과 파일 이름만 다름)
   rs_rtc_n64_gpu:
     type: rs_rtc
@@ -33,3 +35,4 @@ methods:
     guidance_strength: 1000.0
     ess_threshold: 0.5
     use_replacement: false
+    cuda_graph: true
