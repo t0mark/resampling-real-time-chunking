@@ -3,7 +3,7 @@
 # 사용 (rs_rtc/ 에서):
 #   docker compose -f docker/gpu/docker-compose.yml up -d --build
 #   docker exec airlab_hw_rtc_gpu pip install -e /workspace/rs_rtc
-#   docker exec airlab_hw_rtc_gpu python3 scripts/eval_gpu.py
+#   docker exec airlab_hw_rtc_gpu python3 scripts/eval_async.py --methods rtc_paper rs_rtc_n64_gpu
 #   docker compose -f docker/gpu/docker-compose.yml down
 
 services:

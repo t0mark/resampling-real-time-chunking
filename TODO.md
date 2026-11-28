@@ -73,8 +73,8 @@ Naive async 대비 차이(Naive async − 방법, px)
 2. `summarize_episode`의 통계 목록에 새 지표를 추가해 에피소드 CSV에 `mean_executed_prefix_cost`가 남도록 한다.
 3. `scripts/summarize_results.py`에서 새 지표의 평균과 95% 신뢰구간을 요약 CSV에 추가한다.
 4. 평가를 다시 실행한다. 설정은 바꾸지 않는다(d = 0, 1, 2, 4, 7, 각 500 에피소드).
-   - `configs/eval_npu.yaml`: `naive_async`, `bid_n64`, `rs_rtc_n64`
-   - `configs/eval_gpu.yaml`: `rtc_paper`, `rs_rtc_n64_gpu`
+   - `configs/eval_async.yaml` (NPU): `naive_async`, `bid_n64`, `rs_rtc_n64`
+   - `configs/eval_async.yaml` (GPU): `rtc_paper`, `rs_rtc_n64_gpu`
 5. 새 결과로 표 1과 그림 2를 다시 만든다.
 
 ### 주의 사항

@@ -1,0 +1,84 @@
+# 비동기 실행 평가: 방법 × 지연 d (scripts/eval_async.py)
+# 모든 방법이 같은 에피소드·seed·지연을 쓴다. 결과 파일 이름은 방법 이름 ({방법}_d{지연}.csv).
+
+# 평가 에피소드 (env seed = seed_start + 에피소드 번호, 모든 방법 공통)
+episodes: 500
+seed_start: 100000
+max_episode_steps: 300
+sampler_seed: 0
+# 기본 실행 장치 (npu | cuda | cpu, 방법별 backend 로 대체 가능), NPU·CUDA 장치 번호
+backend: npu
+device_index: 0
+# 프로세스당 torch CPU 스레드 (병렬 실행 시 경합 방지)
+cpu_threads: 4
+
+# 지연 d (제어 스텝, 0 = 동기 실행과 동일, 최대 7)
+delays: [0, 1, 2, 4, 7]
+
+# 방법 정의 (type: vanilla | replacement | bid | rs_rtc | rtc_vjp | rtc_paper)
+#   backend: 이 방법의 실행 장치 (생략 시 위 backend). rtc_vjp·rtc_paper 는 역전파가 필요해 cuda·cpu 만 가능
+#   particles: 고정 batch (NPU 는 results/compiled/pusht_unet_b{particles}.rbln)
+#   eta: DDIM 확률성 (0 = 결정적)
+#   kalman_move: (rs_rtc) Ensemble Kalman move 사용, kalman_scale: 이동 강도 배율 (생략 시 false, 1.0)
+#   guidance_weight: (rtc) 가이던스 가중치 β. rtc_vjp: 고정 가중치 β√(1−ᾱ) / rtc_paper: 원 논문 공식 코드의 min(β, (1−τ)/τ·1/r²)
+#   cuda_graph: GPU 계산을 CUDA Graph 로 캡처해 재생 (rtc_paper, rs_rtc 만, 결과는 eager 와 bit 일치)
+#   execute_steps: cycle 당 실행 스텝 s (생략 시 정책 설정 8), delays: 이 방법만 쓸 지연 목록 (생략 시 위 delays)
+#   frozen_only: 일치 가중치를 실행 확정 구간에만 둠 (미실행 감쇠 구간 0, 생략 시 false)
+methods:
+  # 순전파만 쓰는 방법 (NPU)
+  naive_async:
+    type: vanilla
+    particles: 1
+    eta: 0.0
+  bid_n64:
+    type: bid
+    particles: 64
+    eta: 0.0
+  bid_n64_eta05:
+    type: bid
+    particles: 64
+    eta: 0.5
+  rs_rtc_n64:
+    type: rs_rtc
+    particles: 64
+    eta: 0.5
+    guidance_strength: 1000.0
+    ess_threshold: 0.5
+    use_replacement: false
+  rs_rtc_kf_n64:
+    type: rs_rtc
+    particles: 64
+    eta: 0.5
+    guidance_strength: 1000.0
+    ess_threshold: 0.5
+    use_replacement: false
+    kalman_move: true
+    kalman_scale: 100.0
+  per_step:
+    type: vanilla
+    particles: 1
+    eta: 0.0
+    execute_steps: 1
+    delays: [0]
+
+  # GPU 방법 (RTC 역전파, RS-RTC GPU 실행)
+  rtc_vjp:
+    type: rtc_vjp
+    backend: cuda
+    eta: 0.0
+    guidance_weight: 5.0
+  rtc_paper:
+    type: rtc_paper
+    backend: cuda
+    eta: 0.0
+    guidance_weight: 5.0
+    cuda_graph: true
+  rs_rtc_n64_gpu:
+    type: rs_rtc
+    backend: cuda
+    particles: 64
+    eta: 0.5
+    guidance_strength: 1000.0
+    ess_threshold: 0.5
+    use_replacement: false
+    cuda_graph: true

@@ -30,13 +30,12 @@
 rs_rtc/
 ├── README.md, RESULT.md # 연구 개요 / 통합 결과
 ├── configs/
-│   ├── eval_npu.yaml, eval_gpu.yaml          # 본 실험 (NPU 방법 / GPU RTC)
+│   ├── eval_async.yaml                       # 본 실험 (모든 방법, 방법별 실행 장치 backend)
 │   ├── sweep_lambda.yaml, sweep_beta.yaml    # λ·β 선택 (검증 seed)
 │   ├── eval_sync.yaml, bench_latency.yaml    # 동기 실행 검증 / 지연 측정
 │   └── render.yaml                           # 렌더 기록할 에피소드, MuJoCo 영상 설정
 ├── scripts/
-│   ├── eval_npu.py           # 역전파 없는 방법(naive, replacement, BID, RS-RTC) NPU 비동기 평가
-│   ├── eval_gpu.py           # RTC(역전파) CUDA 비동기 평가
+│   ├── eval_async.py         # 비동기 평가 (방법 × 지연, --backend npu|cuda|cpu)
 │   ├── eval_sync.py          # 사전학습 정책 동기 실행 평가 (가중치·정규화·DDIM·NPU 이식 검증)
 │   ├── bench_latency.py      # UNet 1 step 그래프 batch N별 NPU 컴파일·정합성·지연 측정
 │   ├── summarize_results.py  # eval_async CSV를 방법 × 지연별로 집계
@@ -47,12 +46,13 @@ rs_rtc/
 │       └── overlay.py        #   chunk·후보 경로, 타임라인, 상태 표시
 ├── src/rs_rtc/
 │   ├── evaluation.py   # 방법 1개 × 지연 1개 조합의 에피소드 반복과 CSV 저장
+│   ├── backends.py     # UNet 실행 장치 (CPU·CUDA·NPU 공통 호출 방식, NPU 만 rebel 사용)
 │   ├── envs/           # pusht.py: gym-pusht 래퍼 / async_executor.py: 지연 d 비동기 chunk 실행기
-│   ├── npu/            # compile.py: RBLN 정적 그래프 컴파일 / runtime.py: CPU·NPU 공통 UNet 실행 래퍼
+│   ├── npu/            # compile.py: RBLN 정적 그래프 컴파일
 │   ├── policies/       # diffusion_unet.py: 조건부 1D UNet / pretrained.py: 사전학습 가중치 로딩·정규화
 │   ├── samplers/       # base.py: 공통 요소·기본 DDIM 샘플러 / ddim.py: DDIM 스케줄·갱신
-│   │                   # rs_rtc.py: 제안 방법 / rtc_vjp.py: RTC (원 논문식 rtc_paper, 기존 이식 rtc_vjp)
-│   │                   # bid.py: BID / baselines.py: 확정 구간 치환
+│   │                   # rs_rtc.py: 제안 방법 (+ Kalman move) / rtc_vjp.py: RTC (원 논문식 rtc_paper, 기존 이식 rtc_vjp)
+│   │                   # bid.py: BID / baselines.py: 확정 구간 치환 / factory.py: 방법 설정 → 샘플러
 │   └── utils/          # logging.py: 콘솔·results/logs 동시 기록 로거
 ├── tests/              # test_ddim.py: diffusers DDIM 일치 확인 / test_samplers.py: 샘플러·실행기 단위 테스트
 ├── docker/gpu/         # GPU 평가용 Dockerfile, docker-compose.yml
@@ -61,7 +61,7 @@ rs_rtc/
 └── results/
     ├── compiled/       # NPU 컴파일 결과 (.rbln)
     ├── metrics/        # eval_async/(본 실험 CSV), sweep_lambda_val/·sweep_beta_val/(λ·β 선택), summary_main.csv(집계)
-    ├── render/         # 렌더 기록 npz (eval_*.py --render), mujoco/ 3D 영상
+    ├── render/         # 렌더 기록 npz (eval_async.py --render), mujoco/ 3D 영상
     └── logs/           # 실행 로그
 ```
 
@@ -69,9 +69,11 @@ rs_rtc/
 
 - **NPU:** 상위 폴더 `hw/scripts/`의 `rbln_docker.sh`로 컨테이너 기동 후, `/workspace/rs_rtc`에서 실행
   - `CONTAINER_NAME=airlab_hw_rtc scripts/rbln_docker.sh up`
-  - `python3 scripts/eval_npu.py` (컨테이너 `airlab_hw_rtc` 내부)
+  - `python3 scripts/eval_async.py --methods naive_async bid_n64 rs_rtc_n64` (컨테이너 `airlab_hw_rtc` 내부)
 - **GPU:** `docker/gpu/docker-compose.yml` 상단의 사용법 주석을 따른다.
+  - `python3 scripts/eval_async.py --methods rtc_paper rs_rtc_n64_gpu` (RTC 는 `backend: cuda` 로 설정됨)
+- **실행 장치 대체:** `--backend npu|cuda|cpu`, `--device-index N` (결과 파일 이름은 방법 이름 그대로)
 - **집계:** `python3 scripts/summarize_results.py --name main` → `results/metrics/summary_main.csv`
-- **렌더링:** `python3 scripts/eval_npu.py --config configs/render.yaml --methods rs_rtc_n64 --render` → `python3 scripts/render/render_mujoco.py`
+- **렌더링:** `python3 scripts/eval_async.py --config configs/render.yaml --methods rs_rtc_n64 --render` → `python3 scripts/render/render_mujoco.py`
   - MuJoCo CPU 렌더링에 `mujoco`, `libosmesa6`, `imageio[ffmpeg]`이 필요하다.
   - Franka 모델은 `assets/franka_emika_panda/`에 둔다. mujoco_menagerie 저장소의 `franka_emika_panda` 폴더다.

@@ -53,11 +53,15 @@ class DdimSchedule:
         previous_alpha_cumprod = self._alphas_cumprod[previous_timestep] if previous_timestep >= 0 else torch.tensor(1.0)
         return alpha_cumprod, previous_alpha_cumprod
 
+    def clip_clean_sample(self, clean_sample):
+        """x̂_0 를 [−clip, clip] 범위로 자름."""
+        return clean_sample.clamp(-self._clip_sample_range, self._clip_sample_range)
+
     def predict_clean_sample(self, noisy_sample, epsilon, step_index):
         """x_t, ε̂ 로 끝점 x̂_0 를 추정하고 clip."""
         alpha_cumprod, _ = self.alpha_cumprod_pair(step_index)
         clean_sample = (noisy_sample - (1.0 - alpha_cumprod).sqrt() * epsilon) / alpha_cumprod.sqrt()
-        return clean_sample.clamp(-self._clip_sample_range, self._clip_sample_range)
+        return self.clip_clean_sample(clean_sample)
 
     def step_from_clean(self, clean_sample, epsilon, step_index, eta, generator=None):
         """주어진 x̂_0, ε̂ 로 x_prev 를 계산 (η > 0 이면 새 노이즈 주입)."""

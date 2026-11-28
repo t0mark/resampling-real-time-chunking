@@ -7,6 +7,7 @@ cycle 주기는 s (= n_action_steps) 스텝. cycle 시작 t_c 에 관측 o_{t_c}
 새 chunk 의 index 0 … o+d−1 은 이미 실행됐거나 실행이 확정된 구간 (목표 Y_j = 이전 chunk[j + s]).
 d = 0 이면 동기 실행과 같다. 첫 chunk 는 동기로 생성한다. 제약: o + s + d − 1 ≤ H − 1.
 s 는 기본으로 정책의 n_action_steps 이고 execute_steps 로 바꿀 수 있다 (1 = 매 스텝 재추론). 제약: d < s.
+frozen_only 이면 일치 가중치를 확정 구간 (index 0 … o+d−1) 에만 두고 미실행 감쇠 구간은 0 으로 둔다.
 render_enabled 이면 매 스텝 끝단·블록 상태와 chunk 전환 시 계획·후보 경로를 render_record 에 기록한다.
 """
 import logging
@@ -21,10 +22,12 @@ from rs_rtc.samplers.base import InpaintingTarget, weighted_inpainting_cost
 LOGGER = logging.getLogger("rs_rtc.envs")
 
 
-def build_prefix_weights(horizon, frozen_count, overlap_end_index):
-    """일치 가중치 W [H]: 확정 구간 1, overlap_end 까지 RTC 식 지수 감쇠, 이후 0."""
+def build_prefix_weights(horizon, frozen_count, overlap_end_index, frozen_only=False):
+    """일치 가중치 W [H]: 확정 구간 1, overlap_end 까지 RTC 식 지수 감쇠, 이후 0 (frozen_only 면 확정 구간만 1)."""
     prefix_weights = torch.zeros(horizon)
     prefix_weights[:frozen_count] = 1.0
+    if frozen_only:
+        return prefix_weights
     decay_length = overlap_end_index + 1 - (frozen_count - 1)
     for action_index in range(frozen_count, overlap_end_index + 1):
         decay_ratio = (overlap_end_index + 1 - action_index) / decay_length
@@ -35,7 +38,8 @@ def build_prefix_weights(horizon, frozen_count, overlap_end_index):
 class AsyncChunkExecutor:
     """고정 지연 d 로 chunk 생성기를 비동기 실행하고 에피소드 지표를 기록."""
 
-    def __init__(self, environment, policy, chunk_generator, delay_steps, execute_steps=None, render_enabled=False):
+    def __init__(self, environment, policy, chunk_generator, delay_steps, execute_steps=None, render_enabled=False,
+                 frozen_only=False):
         self._environment = environment
         self._policy = policy
         self._chunk_generator = chunk_generator
@@ -52,7 +56,8 @@ class AsyncChunkExecutor:
             raise ValueError(f"지연 d={delay_steps} 가 chunk 길이를 넘음 (o + s + d − 1 ≤ H − 1)")
         if delay_steps >= self._execute_steps:
             raise ValueError(f"지연 d={delay_steps} 가 실행 스텝 수 s={self._execute_steps} 이상 (생성 1개씩 순차라 d < s)")
-        self._prefix_weights = build_prefix_weights(self._horizon, self._frozen_count, self._overlap_end_index)
+        self._prefix_weights = build_prefix_weights(self._horizon, self._frozen_count, self._overlap_end_index,
+                                                    frozen_only)
         self._render_record = None
 
     @property
@@ -99,10 +104,17 @@ class AsyncChunkExecutor:
         prefix_actions[:overlap_length] = previous_chunk[self._execute_steps:self._execute_steps + overlap_length]
         return InpaintingTarget(prefix_actions, self._prefix_weights, self._frozen_count)
 
+    def executed_prefix_cost(self, normalized_chunk, target):
+        """생성 중 이전 chunk 로 실행되는 d 스텝 (index o … o+d−1) 의 평균 제곱오차 (d = 0 이면 None)."""
+        if self._delay_steps == 0:
+            return None
+        executed_indices = slice(self._first_action_index, self._frozen_count)
+        squared_error = ((normalized_chunk[executed_indices] - target.prefix_actions[executed_indices]) ** 2).sum(dim=-1)
+        return float(squared_error.mean())
+
     def generate_chunk(self, target, generator, generation_records):
         """현재 관측으로 chunk 를 생성하고 (정규화 chunk, 픽셀 chunk) 반환, 생성 기록 추가."""
-        agent_pos_history, keypoint_history = self._environment.observation_history()
-        global_cond = self._policy.build_global_cond(agent_pos_history, keypoint_history)
+        global_cond = self._policy.build_global_cond(*self._environment.observation_history())
         generation_start = time.perf_counter()
         normalized_chunk, generation_stats = self._chunk_generator.generate(global_cond, target, generator)
         generation_stats["latency_ms"] = (time.perf_counter() - generation_start) * 1e3
@@ -110,6 +122,11 @@ class AsyncChunkExecutor:
         # 생성 chunk 와 inpainting 목표의 가중 오차 (모든 방법 공통 지표)
         if target is not None:
             generation_stats["prefix_cost"] = float(weighted_inpainting_cost(normalized_chunk.unsqueeze(0), target)[0])
+
+            # 생성 중 실행된 행동과의 오차 (일관성 평가 지표)
+            executed_cost = self.executed_prefix_cost(normalized_chunk, target)
+            if executed_cost is not None:
+                generation_stats["executed_prefix_cost"] = executed_cost
         generation_records.append(generation_stats)
         return normalized_chunk, self._policy.action_normalizer.unnormalize(normalized_chunk)
 
@@ -168,7 +185,7 @@ class AsyncChunkExecutor:
         return self.summarize_episode(env_seed, executed_actions, boundary_step_indices, generation_records)
 
     def summarize_episode(self, env_seed, executed_actions, boundary_step_indices, generation_records):
-        """에피소드 지표: 성공, 최대 보상, chunk 전환 시 행동 변화량, inpainting 오차, 생성 통계."""
+        """에피소드 지표: 성공, 최대 보상, chunk 전환 시 행동 변화량, inpainting 오차, 실행 구간 오차, 생성 통계."""
         # 연속 행동 간 변화량 (픽셀)
         action_array = np.asarray(executed_actions)
         step_changes = np.linalg.norm(np.diff(action_array, axis=0), axis=1)
@@ -191,8 +208,8 @@ class AsyncChunkExecutor:
             "generation_p50_ms": round(float(np.percentile(latency_ms, 50)), 2),
             "chunk_count": len(generation_records),
         }
-        for stat_name in ("prefix_cost", "resample_count", "unique_particles", "min_ess", "selected_cost"):
+        for stat_name in ("prefix_cost", "executed_prefix_cost", "resample_count", "unique_particles", "min_ess", "selected_cost"):
             stat_values = [record[stat_name] for record in guided_records if stat_name in record]
             if stat_values:
-                episode_result[f"mean_{stat_name}"] = round(float(np.mean(stat_values)), 4)
+                episode_result[f"mean_{stat_name}"] = round(float(np.mean(stat_values)), 6)
         return episode_result

@@ -11,6 +11,7 @@ from rs_rtc.policies.diffusion_unet import DiffusionUnet1D
 LOGGER = logging.getLogger("rs_rtc.policies")
 
 PUSHT_KEYPOINTS_REPO = "lerobot/diffusion_pusht_keypoints"
+PUSHT_POLICY_NAME = "pusht"
 CHECKPOINT_UNET_PREFIX = "diffusion.unet."
 
 # 원본 가중치 이름 중 우리 모듈에서 private(_ 접두) 속성으로 둔 이름
@@ -41,6 +42,10 @@ class PretrainedDiffusionPolicy:
         self._agent_pos_normalizer = agent_pos_normalizer
         self._keypoint_normalizer = keypoint_normalizer
         self._action_normalizer = action_normalizer
+
+    @property
+    def name(self):
+        return PUSHT_POLICY_NAME
 
     @property
     def unet(self):

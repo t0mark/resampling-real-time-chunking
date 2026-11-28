@@ -1,12 +1,13 @@
-# RTC 가이던스 가중치 β 선택 (검증 seed, d=4): 본 실험(eval_gpu.yaml) 전에 β 1개를 고른다 (scripts/eval_gpu.py)
+# RTC 가이던스 가중치 β 선택 (검증 seed, d=4): 본 실험(eval_async.yaml) 전에 β 1개를 고른다 (scripts/eval_async.py)
 # 본 실험 seed (100000~) 와 겹치지 않는 검증 seed 사용, RS-RTC λ 선택(sweep_lambda.yaml)과 같은 조건
 
 episodes: 50
 seed_start: 200000
 max_episode_steps: 300
 sampler_seed: 0
-# UNet 연산 장치 (노이즈·DDIM 갱신은 항상 CPU)
-device: cuda
+# 실행 장치 (RTC 역전파 → cuda), CUDA 장치 번호
+backend: cuda
+device_index: 0
 cpu_threads: 4
 # 결과 폴더 (results/metrics/{metrics_subdir}/)
 metrics_subdir: sweep_beta_val

@@ -1,0 +1,18 @@
+# robomimic 사전학습 정책 검증: 지연 없는 동기 실행 (추론 중 환경 정지)
+
+# 과제 (square_ph | tool_hang_ph, assets/robomimic/checkpoints/{task}.ckpt), DDIM step 수
+task: square_ph
+num_inference_steps: 10
+
+# 실행 장치: cpu 또는 npu
+backend: npu
+npu_device: 0
+
+# 평가 에피소드 (env seed = seed_start + 에피소드 번호, Diffusion Policy 평가 seed 와 동일)
+# 최대 step 은 체크포인트 평가 설정값 (square 400, tool_hang 700)
+episodes: 50
+seed_start: 4300000
+
+# DDIM 확률성 (0 = 결정적)
+eta: 0.0
+sampler_seed: 0

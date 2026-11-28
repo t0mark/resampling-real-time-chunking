@@ -1,7 +1,7 @@
 """비동기 실행 평가 공통 요소: 방법 1개 × 지연 1개 조합의 에피소드 반복과 CSV 저장.
 
-NPU 평가 (scripts/eval_npu.py) 와 GPU 평가 (scripts/eval_gpu.py) 가 함께 사용한다.
-결과: results/metrics/{설정 metrics_subdir, 기본 eval_async}/{방법}_d{지연}.csv (에피소드별)
+비동기 실행 평가 (scripts/eval_async.py) 가 사용한다.
+결과: results/metrics/{설정 metrics_subdir, 기본 eval_async (PushT) / eval_async_{task}}/{방법}_d{지연}.csv (에피소드별)
 
 렌더 기록 (render_dir 지정 시): {render_dir}/{방법}_d{지연}_ep{에피소드}.npz (영상은 scripts/render/ 에서 생성)
 npz 항목 (좌표는 PushT 작업 공간 0~512 px, T = 실행 스텝 수, M = chunk 전환 횟수, H = chunk 길이, N = 후보 수):
@@ -24,6 +24,7 @@ import torch
 from rs_rtc import RESULTS_DIR
 from rs_rtc.envs.async_executor import AsyncChunkExecutor
 from rs_rtc.envs.pusht import PushTEnvironment
+from rs_rtc.policies.pretrained import PUSHT_POLICY_NAME, load_pretrained_policy
 
 METRICS_ROOT = RESULTS_DIR / "metrics"
 DEFAULT_METRICS_SUBDIR = "eval_async"
@@ -58,12 +59,31 @@ def save_render_record(render_record, episode_result, delay_steps, execute_steps
                 record_arrays["candidate_plans"].shape[1] if len(render_record["switch_steps"]) else 0)
 
 
+def load_task_policy(config):
+    """설정의 task (생략 시 pusht) 에 맞는 사전학습 정책 로딩 (robomimic 은 num_inference_steps 로 DDIM step 지정)."""
+    task_name = config.get("task", PUSHT_POLICY_NAME)
+    if task_name == PUSHT_POLICY_NAME:
+        return load_pretrained_policy()
+    from rs_rtc.policies.pretrained_robomimic import load_robomimic_policy
+
+    return load_robomimic_policy(task_name, config["num_inference_steps"])
+
+
+def build_environment(policy, config):
+    """정책 task 에 맞는 환경 (max_episode_steps 생략 시 robomimic 은 체크포인트 평가 설정값)."""
+    if policy.name == PUSHT_POLICY_NAME:
+        return PushTEnvironment(policy.n_obs_steps, config["max_episode_steps"])
+    from rs_rtc.envs.robomimic_env import RobomimicEnvironment
+
+    return RobomimicEnvironment(policy.config, config.get("max_episode_steps", policy.config["max_episode_steps"]))
+
+
 def evaluate_combination(method_name, chunk_generator, delay_steps, policy, config, episode_count, render_dir=None,
-                         execute_steps=None):
+                         execute_steps=None, frozen_only=False):
     """방법 1개 × 지연 1개 조합을 평가하고 요약을 로그로 남긴다 (render_dir 지정 시 에피소드별 렌더 기록 저장)."""
-    environment = PushTEnvironment(policy.n_obs_steps, config["max_episode_steps"])
+    environment = build_environment(policy, config)
     executor = AsyncChunkExecutor(environment, policy, chunk_generator, delay_steps, execute_steps,
-                                  render_dir is not None)
+                                  render_dir is not None, frozen_only)
     generator = torch.Generator().manual_seed(config["sampler_seed"])
 
     # 에피소드 반복
@@ -82,7 +102,8 @@ def evaluate_combination(method_name, chunk_generator, delay_steps, policy, conf
                                environment.goal_pose, f"{method_name}_d{delay_steps}_ep{episode_index}", render_dir)
 
     # 요약
-    metrics_dir = METRICS_ROOT / config.get("metrics_subdir", DEFAULT_METRICS_SUBDIR)
+    default_subdir = DEFAULT_METRICS_SUBDIR if policy.name == PUSHT_POLICY_NAME else f"{DEFAULT_METRICS_SUBDIR}_{policy.name}"
+    metrics_dir = METRICS_ROOT / config.get("metrics_subdir", default_subdir)
     save_episode_rows(episode_rows, method_name, delay_steps, metrics_dir)
     LOGGER.info("요약 [%s d=%d, %d 에피소드]: 성공률 %.1f %%, 평균 최대 보상 %.3f, 전환 변화량 %.2f px, "
                 "내부 변화량 %.2f px, 생성 p50 %.1f ms", method_name, delay_steps, episode_count,

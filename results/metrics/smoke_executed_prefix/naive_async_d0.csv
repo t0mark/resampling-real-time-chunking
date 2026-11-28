@@ -1,0 +1,3 @@
+method,delay,episode,env_seed,success,max_reward,steps,boundary_jump_px,interior_step_px,generation_p50_ms,chunk_count,mean_prefix_cost
+naive_async,0,0,100000,0,0.5809,300,5.838,3.748,30.0,38,0.0022
+naive_async,0,1,100001,1,1.0,295,8.451,9.254,29.98,37,0.005

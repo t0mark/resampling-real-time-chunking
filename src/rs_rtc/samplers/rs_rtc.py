@@ -5,7 +5,8 @@ particle N 개를 고정 batch 로 함께 역확산한다. step k 마다
     2. x̂_0 추정, 목표 cost c_i = Σ W_j ‖Y_j − x̂_{i,j}‖² / Σ W_j
     3. potential G_k = −λ_k c_i, 증분 log-weight = G_k − G_{k−1}
     4. ESS < γN 이면 systematic resampling (호스트 index gather), log-weight 초기화
-    5. (선택) 확정 구간 치환, DDIM 갱신 (η > 0 이면 복제 particle 이 갈라짐)
+    5. (선택) Ensemble Kalman move: particle 공분산으로 x̂_0 를 목표 쪽으로 이동
+    6. (선택) 확정 구간 치환, DDIM 갱신 (η > 0 이면 복제 particle 이 갈라짐)
 마지막에 cost 가 가장 작은 particle 을 고른다.
 """
 import torch
@@ -26,15 +27,41 @@ class RsRtcSampler(DdimChunkSampler):
     """Resampling 기반 RTC."""
 
     def __init__(self, denoiser, schedule, horizon, action_dim, time_embed_dim, eta, guidance_strength,
-                 ess_threshold, use_replacement):
+                 ess_threshold, use_replacement, kalman_move=False, kalman_scale=1.0):
         super().__init__(denoiser, schedule, horizon, action_dim, time_embed_dim, eta)
         self._guidance_strength = guidance_strength
         self._ess_threshold = ess_threshold
         self._use_replacement = use_replacement
+        self._kalman_move = kalman_move
+        self._kalman_scale = kalman_scale
 
     def potential_scale(self, step_index):
         """λ_k = λ_max · (k + 1) / K (역확산이 진행될수록 강해짐)."""
         return self._guidance_strength * (step_index + 1) / self.schedule.num_inference_steps
+
+    def kalman_move_samples(self, clean_samples, target, potential_scale):
+        """Ensemble Kalman 평균 이동: x̂_0 [N, H, Da] 를 목표 쪽으로 이동 (관측 = √W 가중 목표 구간)."""
+        particle_count = clean_samples.shape[0]
+        observed_mask = target.prefix_weights > 0
+        observation_scale = target.prefix_weights[observed_mask].sqrt().unsqueeze(-1)
+
+        # 상태 X [N, H·Da], 관측 h(X) [N, m], 목표 y [m]
+        states = clean_samples.reshape(particle_count, -1)
+        observations = (clean_samples[:, observed_mask] * observation_scale).reshape(particle_count, -1)
+        observation_target = (target.prefix_actions[observed_mask] * observation_scale).reshape(-1)
+
+        # particle 공분산과 칼만 이득 (likelihood exp(−λ c) ↔ 관측 잡음 분산 ΣW / (2λ))
+        state_anomalies = states - states.mean(dim=0, keepdim=True)
+        observation_anomalies = observations - observations.mean(dim=0, keepdim=True)
+        cross_covariance = state_anomalies.T @ observation_anomalies / (particle_count - 1)
+        observation_covariance = observation_anomalies.T @ observation_anomalies / (particle_count - 1)
+        noise_variance = float(target.prefix_weights.sum()) / (2.0 * potential_scale * self._kalman_scale)
+        innovation_covariance = observation_covariance + noise_variance * torch.eye(observations.shape[1])
+        kalman_gain = torch.linalg.solve(innovation_covariance, cross_covariance.T).T
+
+        # 평균 이동 후 x̂_0 범위로 clip
+        moved_states = states + (observation_target.unsqueeze(0) - observations) @ kalman_gain.T
+        return self.schedule.clip_clean_sample(moved_states.reshape(clean_samples.shape))
 
     def generate(self, global_cond, target, generator):
         # 목표가 없으면 (첫 chunk) 표준 DDIM
@@ -73,7 +100,12 @@ class RsRtcSampler(DdimChunkSampler):
                 log_weights = torch.zeros(particle_count)
                 resample_count += 1
 
-            # 5. (선택) 확정 구간 치환 후 DDIM 갱신
+            # 5. (선택) Kalman move (마지막 step 제외), 이동한 x̂_0 로 potential 재계산
+            if self._kalman_move and step_index < step_count - 1:
+                clean_sample = self.kalman_move_samples(clean_sample, target, self.potential_scale(step_index))
+                previous_potential = -self.potential_scale(step_index) * weighted_inpainting_cost(clean_sample, target)
+
+            # 6. (선택) 확정 구간 치환 후 DDIM 갱신
             if self._use_replacement:
                 clean_sample[:, :target.frozen_count] = target.prefix_actions[:target.frozen_count]
             noisy_sample = self.schedule.step_from_clean(clean_sample, epsilon, step_index, self._eta, generator)

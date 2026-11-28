@@ -27,7 +27,7 @@ import yaml
 
 from rs_rtc import PROJECT_ROOT, RESULTS_DIR
 from rs_rtc.npu.compile import compile_if_missing, inspect_compiled_model
-from rs_rtc.npu.runtime import CpuDenoiser, NpuDenoiserRuntime
+from rs_rtc.backends import CpuDenoiser, NpuDenoiserRuntime
 from rs_rtc.policies.pretrained import load_pretrained_policy
 from rs_rtc.samplers.base import DdimChunkSampler
 from rs_rtc.samplers.ddim import DdimSchedule

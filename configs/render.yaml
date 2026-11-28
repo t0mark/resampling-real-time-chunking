@@ -1,14 +1,14 @@
-# 에피소드 렌더링: 같은 seed 에서 RS-RTC·per_step (NPU, scripts/eval_npu.py) 와 RTC (GPU, scripts/eval_gpu.py) 를 --render 로 실행
-# 방법 설정은 eval_npu.yaml (rs_rtc_n64, per_step), eval_gpu.yaml (rtc_paper) 과 동일
+# 에피소드 렌더링: 같은 seed 에서 Naive async·RS-RTC·per_step (NPU) 와 RTC (GPU) 를 scripts/eval_async.py --render 로 실행
+# 방법 설정은 eval_async.yaml 의 같은 이름 방법과 동일
 
 # 본 실험 seed 앞부분 (env seed = seed_start + 에피소드 번호)
 episodes: 10
 seed_start: 100000
 max_episode_steps: 300
 sampler_seed: 0
-npu_device: 0
-# UNet 연산 장치 (eval_gpu.py, 노이즈·DDIM 갱신은 항상 CPU)
-device: cuda
+# 기본 실행 장치 (방법별 backend 로 대체 가능), NPU·CUDA 장치 번호
+backend: npu
+device_index: 0
 cpu_threads: 4
 # 에피소드 지표 CSV 폴더 (results/metrics/{metrics_subdir}/, 본 실험 CSV 와 분리)
 metrics_subdir: render
@@ -16,6 +16,10 @@ metrics_subdir: render
 delays: [4]
 
 methods:
+  naive_async:
+    type: vanilla
+    particles: 1
+    eta: 0.0
   rs_rtc_n64:
     type: rs_rtc
     particles: 64
@@ -25,6 +29,7 @@ methods:
     use_replacement: false
   rtc_paper:
     type: rtc_paper
+    backend: cuda
     eta: 0.0
     guidance_weight: 5.0
   per_step:
@@ -61,6 +66,7 @@ mujoco:
     elevation: -80
   # 영상에 표시할 방법 이름
   method_labels:
+    naive_async: "Naive async (no correction)"
     rs_rtc_n64: "RS-RTC (NPU, particle resampling)"
     rtc_paper: "RTC (GPU, backprop guidance)"
     per_step: "No chunking (re-infer every step)"
